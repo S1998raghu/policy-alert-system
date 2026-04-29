@@ -1,14 +1,14 @@
 import json
 import logging
-from openai import OpenAI
+import os
+import time
+import anthropic
 from pydantic import BaseModel
+from app.metrics import LLM_CALL_LATENCY, LLM_FAILURES
 
 logger = logging.getLogger(__name__)
 
-client = OpenAI(
-    base_url="http://localhost:11434/v1",
-    api_key="ollama",
-)
+client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
 
 class RelevanceAndScore(BaseModel):
@@ -35,15 +35,16 @@ Return a JSON object with exactly these fields:
 
 Only return valid JSON. No extra text."""
 
+    t0 = time.perf_counter()
     try:
-        response = client.chat.completions.create(
-            model="llama3.1:8b",
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=512,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,
         )
-        raw = response.choices[0].message.content.strip()
+        LLM_CALL_LATENCY.observe(time.perf_counter() - t0)
+        raw = response.content[0].text.strip()
 
-        # strip markdown code fences if model wraps response
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):
@@ -53,8 +54,8 @@ Only return valid JSON. No extra text."""
         return RelevanceAndScore(**data)
 
     except Exception as e:
+        LLM_FAILURES.inc()
         logger.error(f"LLM assessment failed: {e}")
-        # fallback to safe defaults so pipeline doesn't crash
         return RelevanceAndScore(
             relevant=False,
             matched_interests=[],

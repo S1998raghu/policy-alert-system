@@ -1,0 +1,88 @@
+{
+  "title": "Policy Alert System",
+  "uid": "policy-alert",
+  "schemaVersion": 38,
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Alerts Generated (total)",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "policy_alerts_generated_total",
+          "legendFormat": "Alerts"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Pipeline Runs (total)",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "policy_pipeline_runs_total",
+          "legendFormat": "Runs"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "LLM Failures (total)",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "policy_llm_failures_total",
+          "legendFormat": "Failures"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "LLM Call Latency (p99)",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, rate(policy_llm_call_seconds_bucket[5m]))",
+          "legendFormat": "p99 latency"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "LLM Call Latency Distribution",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(policy_llm_call_seconds_bucket[5m]))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(policy_llm_call_seconds_bucket[5m]))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(policy_llm_call_seconds_bucket[5m]))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "HTTP Request Rate",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(http_requests_total[5m])",
+          "legendFormat": "{{method}} {{endpoint}} {{status}}"
+        }
+      ]
+    }
+  ]
+}

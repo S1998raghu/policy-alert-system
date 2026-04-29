@@ -1,11 +1,18 @@
 import logging
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from starlette.responses import Response
 
 from app import db
 from app.agent import PolicyAgent
+from app.metrics import (
+    ALERTS_GENERATED, PIPELINE_RUNS,
+    HTTP_REQUESTS_TOTAL, HTTP_REQUEST_LATENCY,
+)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -16,12 +23,34 @@ async def lifespan(app: FastAPI):
     yield
 
 
+async def metrics_middleware(request: Request, call_next):
+    t0 = time.perf_counter()
+    response = await call_next(request)
+    elapsed = time.perf_counter() - t0
+    endpoint = request.url.path
+    HTTP_REQUESTS_TOTAL.labels(request.method, endpoint, response.status_code).inc()
+    HTTP_REQUEST_LATENCY.labels(endpoint).observe(elapsed)
+    return response
+
+
 app = FastAPI(
     title="Policy Change Alerting System",
     description="AI-powered regulatory monitoring. Ingests Federal Register documents, assesses relevance using an LLM, and generates personalized alerts based on user interest profiles.",
     version="1.0.0",
     lifespan=lifespan,
 )
+app.middleware("http")(metrics_middleware)
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.get("/metrics")
+def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
 
 class UserProfile(BaseModel):
     user: str
@@ -66,9 +95,13 @@ def run_pipeline(request: RunRequest):
     agent = PolicyAgent(user_profile)
     results = agent.run(per_page=request.per_page)
 
+    alert_count = sum(1 for r in results if r["decision"] == "ALERT")
+    PIPELINE_RUNS.inc()
+    ALERTS_GENERATED.inc(alert_count)
+
     summary = {
         "total": len(results),
-        "ALERT": sum(1 for r in results if r["decision"] == "ALERT"),
+        "ALERT": alert_count,
         "DAILY_DIGEST": sum(1 for r in results if r["decision"] == "DAILY_DIGEST"),
         "IGNORE": sum(1 for r in results if r["decision"] == "IGNORE"),
     }

@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: policy-alert-system
+  namespace: default
+  labels:
+    app: policy-alert-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: policy-alert-system
+  template:
+    metadata:
+      labels:
+        app: policy-alert-system
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: app
+          image: ghcr.io/GITHUB_USER/policy-alert-system:latest
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: policy-alert-config
+          env:
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: policy-alert-secrets
+                  key: ANTHROPIC_API_KEY
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: db-storage
+              mountPath: /app/policy_alerts.db
+              subPath: policy_alerts.db
+      volumes:
+        - name: db-storage
+          persistentVolumeClaim:
+            claimName: policy-alert-pvc

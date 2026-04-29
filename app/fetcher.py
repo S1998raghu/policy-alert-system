@@ -23,7 +23,7 @@ def fetch_recent_documents(per_page: int = 20, conditions: dict | None = None) -
         documents = data.get("results", [])
         logger.info(f"Fetched {len(documents)} documents from Federal Register")
         return [_normalize(doc) for doc in documents]
-    except requests.RequestException as e:
+    except Exception as e:
         logger.error(f"Failed to fetch documents: {e}")
         return []
 
