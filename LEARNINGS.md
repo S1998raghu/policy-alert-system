@@ -226,6 +226,114 @@ with open("large_file.json", "rb") as f:
 
 ---
 
+## SRE Fixes
+
+### 1. Retry with exponential backoff (tenacity)
+
+**Problem:** 429 rate limit errors silently returned `importance_score=0`, permanently storing wrong IGNORE decisions in the DB.
+
+**Fix:** `tenacity` library retries automatically on specific errors:
+```python
+@retry(
+    retry=retry_if_exception_type(anthropic.RateLimitError),
+    wait=wait_exponential(multiplier=1, min=2, max=30),
+    stop=stop_after_attempt(3),
+    reraise=True,
+)
+async def assess_document(...):
+```
+
+- `wait_exponential` — waits 2s, then 4s, then 8s... up to 30s max between retries
+- `stop_after_attempt(3)` — gives up after 3 tries
+- `retry_if_exception_type` — only retries on rate limits, not on your own bugs
+- `reraise=True` — after all retries fail, raises the original exception so the caller knows
+
+**Why exponential backoff vs fixed interval:**
+Fixed: retry every 2s → hammers the API → makes rate limiting worse
+Exponential: wait longer each time → gives the API time to recover
+
+---
+
+### 2. Timeouts on external calls
+
+**Problem:** If Anthropic's API stalls, `/run` hangs forever — holds a connection open indefinitely.
+
+**Fix:** Set timeout on the client:
+```python
+client = anthropic.AsyncAnthropic(
+    api_key=...,
+    timeout=30.0,  # raises APITimeoutError if no response in 30s
+)
+```
+
+**Rule of thumb:** timeout = (p99 latency) × 6. Your p99 was ~5s → 30s timeout.
+
+Always set timeouts on:
+- HTTP clients (`requests`, `httpx`)
+- LLM clients
+- DB connections
+
+---
+
+### 3. Correlation IDs
+
+**Problem:** 20 concurrent LLM calls produce interleaved logs with no way to tie errors to requests.
+
+**Fix:** `contextvars.ContextVar` — a request-scoped variable safe for async:
+```python
+request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
+
+# in middleware — set once per request
+req_id = request.headers.get("X-Request-ID", str(uuid.uuid4())[:8])
+request_id_var.set(req_id)
+
+# anywhere in the call stack — read without passing it explicitly
+rid = request_id_var.get()
+logger.info(f"[{rid}] processing doc...")
+```
+
+`ContextVar` is like a thread-local variable but for async — each concurrent request gets its own value. Safe, no shared state.
+
+The ID is also returned in the response header `X-Request-ID` so callers can trace their request through your logs.
+
+---
+
+### 4. Specific exception handling (never bare `except Exception`)
+
+**Problem:** A bug in your own code gets swallowed the same way as a network error. You'd never know the difference.
+
+**Rule:**
+- **Expected failures** (network timeout, rate limit, API error) → catch specifically, log, return safe fallback
+- **Unexpected failures** (bug in your code) → log at `critical` with `exc_info=True`, then `raise`
+
+```python
+except anthropic.RateLimitError:
+    logger.error("rate limit exceeded")
+    return safe_fallback()          # expected — keep going
+
+except anthropic.APITimeoutError:
+    logger.error("timed out")
+    return safe_fallback()          # expected — keep going
+
+except Exception as e:
+    logger.critical(f"Unexpected error: {e}", exc_info=True)
+    raise                           # YOUR bug — crash loudly, return 500
+```
+
+`exc_info=True` prints the full stack trace in logs.
+`raise` lets FastAPI return a 500 → Prometheus tracks it → alerts fire.
+
+**For HTTP clients, split by error type:**
+```python
+except requests.Timeout:       # slow API
+except requests.HTTPError:     # 4xx/5xx response
+except requests.RequestException:  # network failure
+```
+
+Each tells you something different about what broke.
+
+---
+
 ## Design Patterns (seen in this codebase)
 
 | Pattern | Where | What it does |

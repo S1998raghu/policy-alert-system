@@ -25,8 +25,14 @@ def fetch_recent_documents(per_page: int = 20, interests: list[str] | None = Non
         documents = data.get("results", [])
         logger.info(f"Fetched {len(documents)} documents from Federal Register")
         return [_normalize(doc) for doc in documents]
-    except Exception as e:
-        logger.error(f"Failed to fetch documents: {e}")
+    except requests.Timeout:
+        logger.error("Federal Register API timed out after 15s")
+        return []
+    except requests.HTTPError as e:
+        logger.error(f"Federal Register API returned error: {e.response.status_code}")
+        return []
+    except requests.RequestException as e:
+        logger.error(f"Network error fetching documents: {e}")
         return []
 
 

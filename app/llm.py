@@ -63,12 +63,19 @@ Only return valid JSON. No extra text."""
 
         return RelevanceAndScore.model_validate_json(raw)
 
-    except Exception as e:
+    except anthropic.RateLimitError:
         LLM_FAILURES.inc()
-        logger.error(f"LLM assessment failed: {e}")
-        return RelevanceAndScore(
-            relevant=False,
-            matched_interests=[],
-            importance_score=0.0,
-            reasoning=f"LLM call failed: {e}",
-        )
+        logger.error("Anthropic rate limit exceeded — all retries exhausted")
+        return RelevanceAndScore(relevant=False, matched_interests=[], importance_score=0.0, reasoning="LLM rate limit exceeded")
+    except anthropic.APITimeoutError:
+        LLM_FAILURES.inc()
+        logger.error("Anthropic API timed out after 30s")
+        return RelevanceAndScore(relevant=False, matched_interests=[], importance_score=0.0, reasoning="LLM call timed out")
+    except anthropic.APIError as e:
+        LLM_FAILURES.inc()
+        logger.error(f"Anthropic API error: {e}")
+        return RelevanceAndScore(relevant=False, matched_interests=[], importance_score=0.0, reasoning=f"LLM API error: {e}")
+    except Exception as e:
+        # unexpected error in our own code — log at critical so it's visible
+        logger.critical(f"Unexpected error in assess_document: {e}", exc_info=True)
+        raise
