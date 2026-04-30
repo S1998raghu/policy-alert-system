@@ -3,12 +3,14 @@ import logging
 import os
 import time
 import anthropic
+from dotenv import load_dotenv
+load_dotenv()
 from pydantic import BaseModel
 from app.metrics import LLM_CALL_LATENCY, LLM_FAILURES
 
 logger = logging.getLogger(__name__)
 
-client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+client = anthropic.AsyncAnthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
 
 class RelevanceAndScore(BaseModel):
@@ -18,7 +20,7 @@ class RelevanceAndScore(BaseModel):
     reasoning: str
 
 
-def assess_document(document: dict, interests: list[str]) -> RelevanceAndScore:
+async def assess_document(document: dict, interests: list[str]) -> RelevanceAndScore:
     prompt = f"""You are a policy analyst assistant. Assess the following government document
 for a user with these interests: {interests}
 
@@ -37,7 +39,7 @@ Only return valid JSON. No extra text."""
 
     t0 = time.perf_counter()
     try:
-        response = client.messages.create(
+        response = await client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=512,
             messages=[{"role": "user", "content": prompt}],

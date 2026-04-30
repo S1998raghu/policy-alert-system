@@ -1,7 +1,7 @@
 import logging
 import time
 from contextlib import asynccontextmanager
-
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
@@ -16,7 +16,7 @@ from app.metrics import (
 
 logging.basicConfig(level=logging.INFO)
 
-
+load_dotenv()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
@@ -77,7 +77,7 @@ def create_or_update_user(profile: UserProfile):
 
 
 @app.post("/run", responses={200: {"description": "Pipeline results"}})
-def run_pipeline(request: RunRequest):
+async def run_pipeline(request: RunRequest):
     """
     Fetch the latest documents from the Federal Register and run the full agent pipeline for a user.
 
@@ -93,7 +93,7 @@ def run_pipeline(request: RunRequest):
         raise HTTPException(status_code=404, detail=f"User '{request.user}' not found")
 
     agent = PolicyAgent(user_profile)
-    results = agent.run(per_page=request.per_page)
+    results = await agent.run(per_page=request.per_page)
 
     alert_count = sum(1 for r in results if r["decision"] == "ALERT")
     PIPELINE_RUNS.inc()

@@ -6,12 +6,14 @@ logger = logging.getLogger(__name__)
 FEDERAL_REGISTER_URL = "https://www.federalregister.gov/api/v1/documents.json"
 
 
-def fetch_recent_documents(per_page: int = 20, conditions: dict | None = None) -> list[dict]:
+def fetch_recent_documents(per_page: int = 20, interests: list[str] | None = None, conditions: dict | None = None) -> list[dict]:
     params = {
         "per_page": per_page,
         "order": "newest",
         "fields[]": ["document_number", "title", "abstract", "publication_date", "type", "agencies"],
     }
+    if interests:
+        params["conditions[term]"] = " ".join(interests)
     if conditions:
         for key, value in conditions.items():
             params[key] = value
