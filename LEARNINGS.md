@@ -106,6 +106,83 @@ FastAPI gives you the tools. You still have to use them correctly.
 
 ---
 
+## Context Manager (`with` statement)
+
+### What it is
+A pattern that guarantees cleanup code runs — even if an exception is thrown.
+
+```python
+# without context manager — conn.close() skipped if exception
+conn = get_connection()
+row = conn.execute(...)   # crashes here
+conn.close()              # never runs → connection leak
+
+# with context manager — always cleans up
+with get_connection() as conn:
+    row = conn.execute(...)   # crashes here
+# conn.close() runs automatically no matter what
+```
+
+### Why it matters
+- No resource leaks — connections, files, locks always get released
+- No manual cleanup — you can't forget it
+- Handles exceptions correctly — rollbacks happen automatically on failure
+
+### SQLite context manager specifically
+```python
+with sqlite3.connect(DB_PATH) as conn:
+    conn.execute("INSERT ...")
+# automatically commits on success, rolls back on exception, closes connection
+```
+
+### async version with aiosqlite
+```python
+async with aiosqlite.connect(DB_PATH) as conn:
+    await conn.execute("INSERT ...")
+    await conn.commit()
+```
+Same pattern, but non-blocking — event loop can handle other requests while waiting for DB.
+
+---
+
+## SQLite → aiosqlite (async DB)
+
+### Why we upgraded
+SQLite is synchronous — calling `db.save_result()` inside an async function blocks the event loop. Every other request has to wait while the DB write finishes.
+
+`aiosqlite` wraps SQLite with async/await so DB calls don't block:
+
+```python
+# before — blocks event loop
+def save_result(...):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("INSERT ...")
+
+# after — non-blocking
+async def save_result(...):
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("INSERT ...")
+        await conn.commit()
+```
+
+### The async chain rule
+When a function becomes `async def`, every caller must also `await` it and be `async def` itself. Async spreads upward through the call stack:
+
+```
+db.save_result()     → async def
+  agent._process()   → already async, add await
+    agent.run()      → already async, add await
+      main.run_pipeline() → already async, add await
+```
+
+### WAL mode
+```python
+conn.execute("PRAGMA journal_mode=WAL")
+```
+WAL (Write-Ahead Logging) allows concurrent reads while a write is happening. Important when `asyncio.gather` fires 20 tasks that all hit the DB simultaneously.
+
+---
+
 ## Design Patterns (seen in this codebase)
 
 | Pattern | Where | What it does |

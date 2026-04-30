@@ -64,7 +64,7 @@ class RunRequest(BaseModel):
 
 
 @app.post("/user", responses={200: {"description": "User created or updated"}})
-def create_or_update_user(profile: UserProfile):
+async def create_or_update_user(profile: UserProfile):
     """
     Create or update a user profile.
 
@@ -72,7 +72,7 @@ def create_or_update_user(profile: UserProfile):
     - **interests**: list of topics to monitor e.g. ["AI in healthcare", "data privacy"]
     - **alert_threshold**: importance score cutoff (0-10). Documents scoring at or above this trigger an ALERT.
     """
-    db.upsert_user(profile.user, profile.interests, profile.alert_threshold)
+    await db.upsert_user(profile.user, profile.interests, profile.alert_threshold)
     return {"status": "ok", "user": profile.user}
 
 
@@ -88,7 +88,7 @@ async def run_pipeline(request: RunRequest):
 
     Returns a summary count and the full list of results.
     """
-    user_profile = db.get_user(request.user)
+    user_profile = await db.get_user(request.user)
     if user_profile is None:
         raise HTTPException(status_code=404, detail=f"User '{request.user}' not found")
 
@@ -109,22 +109,22 @@ async def run_pipeline(request: RunRequest):
 
 
 @app.get("/alerts", responses={200: {"description": "ALERT-level results for the user"}})
-def get_alerts(user: str):
+async def get_alerts(user: str):
     """
     Return all ALERT-level results for a user, ordered most recent first.
 
     Only documents that scored at or above the user's alert_threshold appear here.
     """
-    user_profile = db.get_user(user)
+    user_profile = await db.get_user(user)
     if user_profile is None:
         raise HTTPException(status_code=404, detail=f"User '{user}' not found")
 
-    alerts = db.get_alerts(user)
+    alerts = await db.get_alerts(user)
     return {"user": user, "alerts": alerts}
 
 
 @app.get("/explain", responses={200: {"description": "Full reasoning for a document decision"}})
-def explain(user: str, document_id: str):
+async def explain(user: str, document_id: str):
     """
     Return the full reasoning for a specific document decision.
 
@@ -133,7 +133,7 @@ def explain(user: str, document_id: str):
 
     Returns the LLM's relevance assessment, importance score, decision, and explanation.
     """
-    result = db.get_result(user, document_id)
+    result = await db.get_result(user, document_id)
     if result is None:
         raise HTTPException(status_code=404, detail="No result found for this user and document")
     return result

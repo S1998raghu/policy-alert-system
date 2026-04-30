@@ -18,13 +18,12 @@ class PolicyAgent:
     async def run(self, per_page: int = 20) -> list[dict]:
         logger.info(f"[{self.user}] Fetching documents...")
         documents = fetch_recent_documents(per_page=per_page, interests=self.interests)
-        for doc in documents:                                             
-          db.upsert_document(doc)
+        await asyncio.gather(*[db.upsert_document(doc) for doc in documents])
         results = await asyncio.gather(*[self._process(doc) for doc in documents])
 
         for doc, result in zip(documents, results):
             logger.info(f"[{self.user}] {doc['id']} → {result['decision']} (score={result['importance_score']})")
-            db.save_result(self.user, doc["id"], result)
+        await asyncio.gather(*[db.save_result(self.user, doc["id"], result) for doc, result in zip(documents, results)])
 
         return results
 
