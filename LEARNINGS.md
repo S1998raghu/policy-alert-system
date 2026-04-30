@@ -183,6 +183,49 @@ WAL (Write-Ahead Logging) allows concurrent reads while a write is happening. Im
 
 ---
 
+## JSON Parsing — `json.loads()` vs safer alternatives
+
+### The problem with `json.loads()`
+```python
+data = json.loads(raw)  # loads entire payload into memory at once
+```
+- No size limit — will parse a 1GB string without complaint
+- Must have complete string before parsing starts — no streaming
+- Two steps: parse then validate separately
+
+### For small known payloads (LLM responses) — use Pydantic
+```python
+# before — two steps, no type safety
+data = json.loads(raw)
+return RelevanceAndScore(**data)
+
+# after — one step, validates types automatically
+return RelevanceAndScore.model_validate_json(raw)
+```
+`model_validate_json` parses and validates in one step. If the JSON is missing a field or has the wrong type, it raises a clear error immediately.
+
+### For large/unknown payloads — use `ijson` (streaming parser)
+```python
+import ijson
+
+# instead of loading entire file into memory:
+with open("large_file.json", "rb") as f:
+    for item in ijson.items(f, "results.item"):
+        process(item)  # processes one item at a time
+```
+`ijson` reads the file as a stream — memory usage stays flat no matter how large the file is.
+
+### When to use what
+
+| Situation | Use |
+|---|---|
+| Small LLM response, known structure | `model_validate_json()` |
+| Small payload, no Pydantic model | `json.loads()` is fine |
+| Large file (logs, bulk API response) | `ijson` streaming |
+| Untrusted external input | Size check + `model_validate_json()` |
+
+---
+
 ## Design Patterns (seen in this codebase)
 
 | Pattern | Where | What it does |

@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import time
@@ -52,8 +51,7 @@ Only return valid JSON. No extra text."""
             if raw.startswith("json"):
                 raw = raw[4:]
 
-        data = json.loads(raw)
-        return RelevanceAndScore(**data)
+        return RelevanceAndScore.model_validate_json(raw)
 
     except Exception as e:
         LLM_FAILURES.inc()
