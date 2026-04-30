@@ -1,5 +1,7 @@
 import logging
 import time
+import uuid
+from contextvars import ContextVar
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
@@ -17,6 +19,8 @@ from app.metrics import (
 logging.basicConfig(level=logging.INFO)
 
 load_dotenv()
+
+request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
@@ -24,12 +28,17 @@ async def lifespan(app: FastAPI):
 
 
 async def metrics_middleware(request: Request, call_next):
+    req_id = request.headers.get("X-Request-ID", str(uuid.uuid4())[:8])
+    request_id_var.set(req_id)
+
     t0 = time.perf_counter()
     response = await call_next(request)
     elapsed = time.perf_counter() - t0
+
     endpoint = request.url.path
     HTTP_REQUESTS_TOTAL.labels(request.method, endpoint, response.status_code).inc()
     HTTP_REQUEST_LATENCY.labels(endpoint).observe(elapsed)
+    response.headers["X-Request-ID"] = req_id
     return response
 
 

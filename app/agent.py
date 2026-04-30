@@ -3,7 +3,7 @@ import logging
 from app.fetcher import fetch_recent_documents
 from app.llm import assess_document
 from app.decision import make_decision
-
+from app.main import request_id_var
 from app import db
 
 logger = logging.getLogger(__name__)
@@ -16,13 +16,14 @@ class PolicyAgent:
         self.alert_threshold = user_profile["alert_threshold"]
 
     async def run(self, per_page: int = 20) -> list[dict]:
-        logger.info(f"[{self.user}] Fetching documents...")
+        rid = request_id_var.get()
+        logger.info(f"[{rid}][{self.user}] Fetching documents...")
         documents = fetch_recent_documents(per_page=per_page, interests=self.interests)
         await asyncio.gather(*[db.upsert_document(doc) for doc in documents])
         results = await asyncio.gather(*[self._process(doc) for doc in documents])
 
         for doc, result in zip(documents, results):
-            logger.info(f"[{self.user}] {doc['id']} → {result['decision']} (score={result['importance_score']})")
+            logger.info(f"[{rid}][{self.user}] {doc['id']} → {result['decision']} (score={result['importance_score']})")
         await asyncio.gather(*[db.save_result(self.user, doc["id"], result) for doc, result in zip(documents, results)])
 
         return results
