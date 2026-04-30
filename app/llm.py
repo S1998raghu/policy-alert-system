@@ -10,7 +10,10 @@ from app.metrics import LLM_CALL_LATENCY, LLM_FAILURES
 
 logger = logging.getLogger(__name__)
 
-client = anthropic.AsyncAnthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+client = anthropic.AsyncAnthropic(
+    api_key=os.environ.get("ANTHROPIC_API_KEY"),
+    timeout=30.0,  # hard cutoff — don't hang forever if Anthropic stalls
+)
 
 
 class RelevanceAndScore(BaseModel):
