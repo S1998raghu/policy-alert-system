@@ -5,6 +5,7 @@ import anthropic
 from dotenv import load_dotenv
 load_dotenv()
 from pydantic import BaseModel
+from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 from app.metrics import LLM_CALL_LATENCY, LLM_FAILURES
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,12 @@ class RelevanceAndScore(BaseModel):
     reasoning: str
 
 
+@retry(
+    retry=retry_if_exception_type(anthropic.RateLimitError),
+    wait=wait_exponential(multiplier=1, min=2, max=30),
+    stop=stop_after_attempt(3),
+    reraise=True,
+)
 async def assess_document(document: dict, interests: list[str]) -> RelevanceAndScore:
     prompt = f"""You are a policy analyst assistant. Assess the following government document
 for a user with these interests: {interests}
