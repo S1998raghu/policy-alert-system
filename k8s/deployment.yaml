@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
         - name: app
-          image: ghcr.io/GITHUB_USER/policy-alert-system:latest
+          image: ghcr.io/s1998raghu/policy-alert-system:latest
           ports:
             - containerPort: 8000
           envFrom:
@@ -54,8 +54,7 @@ spec:
               memory: "512Mi"
           volumeMounts:
             - name: db-storage
-              mountPath: /app/policy_alerts.db
-              subPath: policy_alerts.db
+              mountPath: /app/data
       volumes:
         - name: db-storage
           persistentVolumeClaim:

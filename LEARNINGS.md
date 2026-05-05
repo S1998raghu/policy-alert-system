@@ -334,6 +334,59 @@ Each tells you something different about what broke.
 
 ---
 
+## Kubernetes Deployment Errors ("Works on My Machine" Bugs)
+
+All 3 errors only surfaced when moving from local to containerized Kubernetes.
+
+### 1. Image Pull Error
+```
+Failed to pull image: denied
+```
+**Cause:** Kubernetes tried to pull the image from `ghcr.io` but it had never been built or pushed there.
+
+**Fix:** Build and push the image to the registry before deploying.
+```bash
+docker build -t ghcr.io/user/app:latest .
+docker push ghcr.io/user/app:latest
+```
+
+**Lesson:** Kubernetes always pulls from a registry — it doesn't know about your local Docker image cache. For local-only dev, use `imagePullPolicy: Never`.
+
+---
+
+### 2. Circular Import
+```
+ImportError: cannot import from partially initialized module 'app.main'
+```
+**Cause:** `main.py` imported from `agent.py`, and `agent.py` imported from `main.py`. Python resolved it by luck locally based on load order — broke in the container.
+
+**Fix:** Move shared state (`request_id_var`) to its own `context.py` file so neither module depends on the other.
+
+**Lesson:** Circular imports are always a latent bug. They don't always blow up immediately — load order determines whether they're visible. Fix by moving shared state to a neutral module.
+
+---
+
+### 3. SQLite Can't Open Database File
+```
+sqlite3.OperationalError: unable to open database file
+```
+**Cause:** The PVC was mounted with `subPath: policy_alerts.db` — a file-level mount. Since the volume was brand new and empty, Kubernetes created a broken mount point. SQLite couldn't write to it.
+
+**Fix:** Mount the PVC as a directory instead:
+```yaml
+# broken
+mountPath: /app/policy_alerts.db
+subPath: policy_alerts.db
+
+# fixed
+mountPath: /app/data
+```
+SQLite then creates the file inside `/app/data/` on first run.
+
+**Lesson:** Kubernetes can always mount an empty directory from a new PVC. File-level `subPath` mounts fail if the file doesn't pre-exist in the volume.
+
+---
+
 ## Design Patterns (seen in this codebase)
 
 | Pattern | Where | What it does |

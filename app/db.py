@@ -1,9 +1,10 @@
 import aiosqlite
 import json
+import os
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent.parent / "policy_alerts.db"
+DB_PATH = Path(os.getenv("DB_PATH", "/app/data/policy_alerts.db"))
 
 DDL = """
     CREATE TABLE IF NOT EXISTS users (

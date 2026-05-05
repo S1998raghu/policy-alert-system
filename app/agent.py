@@ -3,7 +3,7 @@ import logging
 from app.fetcher import fetch_recent_documents
 from app.llm import assess_document
 from app.decision import make_decision
-from app.main import request_id_var
+from app.context import request_id_var
 from app import db
 
 logger = logging.getLogger(__name__)

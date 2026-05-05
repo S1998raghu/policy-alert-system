@@ -1,7 +1,6 @@
 import logging
 import time
 import uuid
-from contextvars import ContextVar
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
@@ -11,6 +10,7 @@ from starlette.responses import Response
 
 from app import db
 from app.agent import PolicyAgent
+from app.context import request_id_var
 from app.metrics import (
     ALERTS_GENERATED, PIPELINE_RUNS,
     HTTP_REQUESTS_TOTAL, HTTP_REQUEST_LATENCY,
@@ -19,8 +19,6 @@ from app.metrics import (
 logging.basicConfig(level=logging.INFO)
 
 load_dotenv()
-
-request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
