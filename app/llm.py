@@ -42,7 +42,7 @@ Return a JSON object with exactly these fields:
 - relevant (bool): is this document relevant to the user's interests?
 - matched_interests (list of strings): which specific interests from the list match this document
 - importance_score (float between 0 and 10): how important is this document for the user?
-- reasoning (string): one sentence explaining your decision
+- reasoning (string): one sentence explaining your decision.
 
 Only return valid JSON. No extra text."""
 

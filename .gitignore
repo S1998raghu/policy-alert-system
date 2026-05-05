@@ -4,3 +4,4 @@ __pycache__/
 *.db
 policy_alerts.db
 .env
+k8s/secret.yaml

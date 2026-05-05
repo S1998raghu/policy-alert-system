@@ -23,7 +23,7 @@ def fetch_recent_documents(per_page: int = 20, interests: list[str] | None = Non
         response.raise_for_status()
         data = response.json()
         documents = data.get("results", [])
-        logger.info(f"Fetched {len(documents)} documents from Federal Register")
+        logger.info(f"Fetched {len(documents)} documents from Federal Register to specify interests")
         return [_normalize(doc) for doc in documents]
     except requests.Timeout:
         logger.error("Federal Register API timed out after 15s")

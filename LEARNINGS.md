@@ -387,6 +387,83 @@ SQLite then creates the file inside `/app/data/` on first run.
 
 ---
 
+## SQLite vs PostgreSQL in Kubernetes
+
+### Why SQLite breaks during rolling updates
+
+Rolling update = two pods temporarily running at once. Both mount the same PVC and try to write to the same `.db` file.
+
+SQLite uses **file-level locking** — not row-level or MVCC. So:
+- Old pod holds the file lock
+- New pod tries to write → `database is locked` → crash → rollout fails
+
+If storage allows concurrent mounts (RWX) → corruption risk.
+If storage is RWO → second pod can't even mount → scheduling failure.
+
+### Why it works locally but breaks in Kubernetes
+
+| Dev | Prod (Kubernetes) |
+|---|---|
+| Single container | Multiple pods during rollout |
+| No concurrency | Concurrent writes |
+| No rolling updates | Rolling updates by default |
+| Ephemeral lifecycle | Persistent shared storage |
+
+### The fix — `Recreate` strategy
+Kill old pod before starting new one. Only one writer ever exists.
+```yaml
+strategy:
+  type: Recreate
+```
+Tradeoff: brief downtime during deploys. Acceptable for SQLite.
+
+### Why PostgreSQL fixes this
+- Uses **MVCC** (multi-version concurrency control) — multiple writers handled safely
+- Runs as a separate service, not a file
+- Works cleanly with rolling updates, horizontal scaling, connection pooling
+
+### SQLite is not inherently bad for production
+It works fine for: read-heavy workloads, edge devices, single-instance services, embedded systems.
+It breaks for: distributed systems, multi-writer workloads, Kubernetes-style orchestration.
+
+---
+
+## Kubernetes Rollouts
+
+Any change to the pod spec (image, env vars, resources) automatically triggers a rollout. Kubernetes creates a new pod and kills the old one per the configured strategy.
+
+### Three ways to trigger a rollout — all equivalent
+
+```bash
+# 1. Imperative shortcut
+kubectl set image deployment/policy-alert-system app=ghcr.io/user/app:v2
+
+# 2. Declarative (edit yaml then apply) — preferred
+kubectl apply -f k8s/deployment.yaml
+
+# 3. Force restart same image
+kubectl rollout restart deployment/policy-alert-system
+```
+
+Prefer option 2 in practice — the yaml file stays as source of truth. `kubectl set image` changes the cluster state without updating your file, so the next `kubectl apply` reverts it.
+
+### Rollout strategy controls what happens during the swap
+
+- `RollingUpdate` — new pod starts, passes readiness probe, then old pod dies. Zero downtime. Breaks with SQLite (two pods, one file).
+- `Recreate` — old pod dies first, then new pod starts. Brief downtime. Required for single-file storage like SQLite.
+
+### Rollback
+
+```bash
+kubectl rollout undo deployment/policy-alert-system        # go back one version
+kubectl rollout undo deployment/policy-alert-system --to-revision=2  # go to specific version
+kubectl rollout history deployment/policy-alert-system     # see all revisions
+```
+
+Kubernetes keeps a history of replica sets so rollback is instant — it just switches back to the previous pod spec.
+
+---
+
 ## Design Patterns (seen in this codebase)
 
 | Pattern | Where | What it does |
